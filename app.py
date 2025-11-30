@@ -1,9 +1,13 @@
 import os
 import io
+import time
+import json
 import base64
 import requests
+import threading
 import pandas as pd
 from PIL import Image
+from datetime import datetime
 from dotenv import load_dotenv
 from flask import Flask, request
 import google.generativeai as genai
@@ -13,6 +17,30 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 load_dotenv()
 
 app = Flask(__name__)
+
+# ==================== History ====================
+HISTORY_FILE = "history.json"
+SAVE_INTERVAL = 60
+
+try:
+    with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+        loaded_history = json.load(f)
+        conversation_history = defaultdict(list, {str(k): v for k, v in loaded_history.items()})
+    print(f"تم تحميل {len(conversation_history)} محادثة من history.json")
+except FileNotFoundError:
+    conversation_history = defaultdict(list)
+
+def save_history_background():
+    while True:
+        time.sleep(SAVE_INTERVAL)
+        try:
+            temp_dict = dict(conversation_history)
+            with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+                json.dump(temp_dict, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"خطأ في حفظ الـ history: {e}")
+
+threading.Thread(target=save_history_background, daemon=True).start()
 
 # ==================== Gemini Setup ====================
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -38,9 +66,6 @@ MODEL = genai.GenerativeModel(
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 csv_path = os.path.join(BASE_DIR, 'products.csv')
 CSV_DATA = pd.read_csv(csv_path)
-
-# ==================== Memory ====================
-conversation_history = defaultdict(list)
 
 # ==================== WhatsApp Config ====================
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
@@ -110,6 +135,16 @@ def gemini_chat(user_message="", image_b64=None, from_number="unknown"):
             pid = str(row['product_id'])
             products_text += f"• {name} | السعر: {price} جنيه | الكاتيجوري: {cat} | اللينك: https://afaq-stores.com/product-details/{pid}\n"
 
+        history_lines = ""
+        for entry in conversation_history[from_number][-50:]:
+            if isinstance(entry, dict):
+                time_str = entry.get("time", "")
+                role = "العميل" if entry["role"] == "user" else "أحمد"
+                text = entry["text"]
+                history_lines += f"{time_str} - {role}: {text}\n"
+            else:
+                history_lines += f"{entry[0]}: {entry[1]}\n"
+
         full_message = f"""
 أنت شاب مصري اسمه «أحمد»، بتتكلم عامية مصرية طبيعية جدًا وودودة، بتحب الموضة والعناية الشخصية وبتعرف تحلل الصور كويس.
 
@@ -119,7 +154,7 @@ def gemini_chat(user_message="", image_b64=None, from_number="unknown"):
 {products_text}
 
 آخر رسايل المحادثة:
-{"".join([f"{role}: {msg}\n" for role, msg in conversation_history[from_number][-10:]])}
+{history_lines}
 
 العميل بيقول دلوقتي: {user_message or "بعت صورة"}
 
@@ -145,10 +180,12 @@ def gemini_chat(user_message="", image_b64=None, from_number="unknown"):
 
         reply = response.text.strip() if response and hasattr(response, "text") and response.text else "ثواني بس، فيه حاجة غلط، جرب تاني"
 
-        conversation_history[from_number].append(("user", user_message or "[صورة]"))
-        conversation_history[from_number].append(("assistant", reply))
-        if len(conversation_history[from_number]) > 40:
-            conversation_history[from_number] = conversation_history[from_number][-40:]
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        conversation_history[from_number].append({"role": "user", "text": user_message or "[صورة]", "time": now})
+        conversation_history[from_number].append({"role": "assistant", "text": reply, "time": now})
+
+        if len(conversation_history[from_number]) > 200:
+            conversation_history[from_number] = conversation_history[from_number][-200:]
 
         return reply
 
@@ -172,8 +209,13 @@ def gemini_chat_audio(audio_file, from_number):
         response = MODEL.generate_content([full_message, audio_file])
         reply = response.text.strip() if response and response.text else "الريكورد مجاش واضح، ابعته تاني"
 
-        conversation_history[from_number].append(("user", "[ريكورد صوتي]"))
-        conversation_history[from_number].append(("assistant", reply))
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        conversation_history[from_number].append({"role": "user", "text": "[ريكورد صوتي]", "time": now})
+        conversation_history[from_number].append({"role": "assistant", "text": reply, "time": now})
+
+        if len(conversation_history[from_number]) > 200:
+            conversation_history[from_number] = conversation_history[from_number][-200:]
+
         return reply
 
     except Exception as e:
