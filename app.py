@@ -280,8 +280,6 @@ def webhook_receive():
 # ==================== Telegram Bot ====================
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-if TELEGRAM_TOKEN:
-    print("تليجرام بوت بيشتغل دلوقتي...")
 
     async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
@@ -289,30 +287,30 @@ if TELEGRAM_TOKEN:
             "ابعتلي أي حاجة: صورة، صوت، أو سؤال.. وهرد عليك فورًا زي الواتساب بالظبط!"
         )
 
-    async caduta def handle_telegram(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = str(update.effective_user.id)
-        
-        if update.message.photo:
-            file = await update.message.photo[-1].get_file()
-            file_bytes = await file.download_as_bytearray()
-            image_b64 = base64.b64encode(file_bytes).decode('utf-8')
-            reply = gemini_chat("بعت صورة", image_b64, from_number=user_id)
-
-        elif update.message.voice or update.message.audio:
-            file_obj = update.message.voice or update.message.audio
-            file = await file_obj.get_file()
-            file_bytes = await file.download_as_bytearray()
-            audio_io = io.BytesIO(file_bytes)
-            audio_io.name = "voice.ogg"
-            reply = gemini_chat_audio(audio_io, from_number=user_id)
-
-        elif update.message.text:
-            reply = gemini_chat(update.message.text, from_number=user_id)
-
-        else:
-            reply = "مش فاهم اللي انت بعته، جرب تبعت نص أو صورة أو صوت 😅"
-
-        await update.message.reply_text(reply)
+        async def handle_telegram(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            user_id = str(update.effective_user.id)
+            
+            if update.message.photo:
+                file = await update.message.photo[-1].get_file()
+                file_bytes = await file.download_as_bytearray()
+                image_b64 = base64.b64encode(file_bytes).decode('utf-8')
+                reply = gemini_chat("بعت صورة", image_b64, from_number=user_id)
+    
+            elif update.message.voice or update.message.audio:
+                file_obj = update.message.voice or update.message.audio
+                file = await file_obj.get_file()
+                file_bytes = await file.download_as_bytearray()
+                audio_io = io.BytesIO(file_bytes)
+                audio_io.name = "voice.ogg"
+                reply = gemini_chat_audio(audio_io, from_number=user_id)
+    
+            elif update.message.text:
+                reply = gemini_chat(update.message.text, from_number=user_id)
+    
+            else:
+                reply = "مش فاهم إيه اللي بعته، جرب تبعت نص أو صورة أو صوت 😅"
+    
+            await update.message.reply_text(reply)
 
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
@@ -327,3 +325,4 @@ if TELEGRAM_TOKEN:
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
