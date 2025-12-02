@@ -1,0 +1,23 @@
+# البيئة والأسرار
+.env
+.env.local
+.env.* 
+
+# تاريخ المحادثات (هيتعمل على السيرفر بعد أول رسالة)
+history.json
+
+# ملفات الكاش والبايثون
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.PythonEnv/
+
+# فولدرات الـ venv
+venv/
+env/
+.venv/
+
+# ملفات النظام
+.DS_Store
+Thumbs.db
