@@ -179,7 +179,7 @@ def telegram_webhook():
     chat_id = msg["chat"]["id"]
 
     if "text" in msg:
-        reply = gemini_chat(msg["text"], from_number=user_id)
+        reply = gemini_chat(msg["text"], user_id=user_id)
     elif "photo" in msg:
         file_id = msg["photo"][-1]["file_id"]
         file_info = requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getFile?file_id={file_id}").json()
@@ -188,7 +188,7 @@ def telegram_webhook():
             file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}"
             img_data = requests.get(file_url).content
             b64 = base64.b64encode(img_data).decode()
-            reply = gemini_chat("بعت صورة", b64, user_id)
+            reply = gemini_chat("بعت صورة", b64, user_id=user_id)
         else:
             reply = "مش قادر أشوف الصورة"
     elif "voice" in msg or "audio" in msg:
@@ -228,3 +228,4 @@ def home():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
