@@ -3,17 +3,17 @@ import io
 import time
 import json
 import base64
+import logging
 import requests
 import threading
 import pandas as pd
 from PIL import Image
 from datetime import datetime
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify
 import google.generativeai as genai
 from collections import defaultdict
+from flask import Flask, request, jsonify
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
-import logging
 
 logging.basicConfig(level=logging.INFO)
 load_dotenv()
@@ -226,3 +226,4 @@ def home():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
