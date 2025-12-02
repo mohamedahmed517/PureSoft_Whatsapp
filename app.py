@@ -3,18 +3,18 @@ import io
 import time
 import json
 import base64
-import logging
 import requests
 import threading
 import pandas as pd
 from PIL import Image
-import multiprocessing
 from datetime import datetime
 from dotenv import load_dotenv
 from flask import Flask, request
 import google.generativeai as genai
 from collections import defaultdict
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
+import logging
+import multiprocessing
 
 logging.basicConfig(level=logging.INFO)
 load_dotenv()
@@ -23,7 +23,7 @@ app = Flask(__name__)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
-WEBHOOK_VERIFY_TOKEN = os.getenv("WEBHOOK_VERIFY_TOKEN", "afaq_whatsapp_only_2025")
+WEBHOOK_VERIFY_TOKEN = os.getenv("WEBHOOK_VERIFY_TOKEN")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 if not GEMINI_API_KEY:
@@ -107,7 +107,7 @@ def send_whatsapp_message(to_number, text):
     except Exception as e:
         print(f"Send failed: {e}")
 
-# ==================== Gemini Chat (بوت ذكي - مش إنسان) ====================
+# ==================== Gemini Chat ====================
 def gemini_chat(user_message="", image_b64=None, from_number="unknown"):
     try:
         location = {"city": "القاهرة", "lat": 30.04, "lon": 31.23}
@@ -275,7 +275,7 @@ def webhook_receive():
         logging.exception(e)
     return "OK", 200
 
-# ==================== Telegram Bot ====================
+# ==================== Telegram Bot (Process منفصل) ====================
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
@@ -322,13 +322,13 @@ def run_telegram_bot():
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_telegram))
     application.run_polling(drop_pending_updates=True)
 
-if TELEGRAM_TOKEN:
-    multiprocessing.set_start_method('spawn', force=True)
-    p = multiprocessing.Process(target=run_telegram_bot, daemon=True)
-    p.start()
-    print("بوت تليجرام شغال في Process منفصل")
-
 # ==================== Run Server ====================
 if __name__ == "__main__":
+    if TELEGRAM_TOKEN:
+        multiprocessing.set_start_method('spawn', force=True)
+        p = multiprocessing.Process(target=run_telegram_bot, daemon=True)
+        p.start()
+        print("بوت تليجرام شغال في Process منفصل")
+
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
