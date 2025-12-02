@@ -8,12 +8,14 @@ import requests
 import threading
 import pandas as pd
 from PIL import Image
+from telegram import Update
 from datetime import datetime
 from dotenv import load_dotenv
 from flask import Flask, request
 import google.generativeai as genai
 from collections import defaultdict
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
 logging.basicConfig(level=logging.INFO)
 
@@ -47,7 +49,7 @@ threading.Thread(target=save_history_background, daemon=True).start()
 # ==================== Gemini Setup ====================
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
-    raise ValueError("GEMINI_API_KEY مش موجود في .env")
+    raise ValueError("GEMINI_API_KEY مش موجود في الـ Variables")
 
 genai.configure(api_key=GEMINI_API_KEY)
 
@@ -59,7 +61,7 @@ safety_settings = [
 ]
 
 MODEL = genai.GenerativeModel(
-    'gemini-2.0-flash',
+    'gemini-1.5-flash',
     generation_config={"temperature": 0.85, "max_output_tokens": 2048},
     safety_settings=safety_settings
 )
@@ -144,8 +146,6 @@ def gemini_chat(user_message="", image_b64=None, from_number="unknown"):
                 role = "العميل" if entry["role"] == "user" else "أحمد"
                 text = entry["text"]
                 history_lines += f"{time_str} - {role}: {text}\n"
-            else:
-                history_lines += f"{entry[0]}: {entry[1]}\n"
 
         full_message = f"""
 أنت شاب مصري اسمه «أحمد»، بتتكلم عامية مصرية طبيعية جدًا وودودة، بتحب الموضة والعناية الشخصية وبتعرف تحلل الصور كويس.
@@ -211,7 +211,8 @@ def gemini_chat_audio(audio_file, from_number):
         print(f"Audio error: {e}")
         return "الريكورد مجاش واضح، ابعته تاني"
 
-def process_message(msg):
+# ==================== WhatsApp Message Processor ====================
+def process_whatsapp_message(msg):
     from_number = msg["from"]
     msg_type = msg["type"]
 
@@ -245,10 +246,10 @@ def process_message(msg):
 
     send_whatsapp_message(from_number, reply)
 
-# ==================== Routes ====================
+# ==================== WhatsApp Routes ====================
 @app.route("/")
 def home():
-    return "واتس آب شغال 100%"
+    return "آفاق ستورز بوت شغال على واتساب وتليجرام 100%"
 
 @app.route("/webhook", methods=["GET"])
 def webhook_verify():
@@ -266,18 +267,63 @@ def webhook_receive():
         for entry in data["entry"]:
             for change in entry.get("changes", []):
                 value = change.get("value", {})
-
                 if "messages" in value and value["messages"]:
                     for msg in value["messages"]:
-                        process_message(msg)
-
+                        process_whatsapp_message(msg)
 
     except Exception as e:
-        logging.error(f"Webhook Error: {e}")
+        logging.error(f"WhatsApp Webhook Error: {e}")
         logging.exception(e)
 
     return "OK", 200
 
+# ==================== Telegram Bot ====================
+
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+if TELEGRAM_TOKEN:
+    print("تليجرام بوت بيشتغل دلوقتي...")
+
+    async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text(
+            "أهلًا وسهلًا يا وحش! أنا أحمد من آفاق ستورز 👋\n"
+            "ابعتلي أي حاجة: صورة، صوت، أو سؤال.. وهرد عليك فورًا زي الواتساب بالظبط!"
+        )
+
+    async caduta def handle_telegram(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = str(update.effective_user.id)
+        
+        if update.message.photo:
+            file = await update.message.photo[-1].get_file()
+            file_bytes = await file.download_as_bytearray()
+            image_b64 = base64.b64encode(file_bytes).decode('utf-8')
+            reply = gemini_chat("بعت صورة", image_b64, from_number=user_id)
+
+        elif update.message.voice or update.message.audio:
+            file_obj = update.message.voice or update.message.audio
+            file = await file_obj.get_file()
+            file_bytes = await file.download_as_bytearray()
+            audio_io = io.BytesIO(file_bytes)
+            audio_io.name = "voice.ogg"
+            reply = gemini_chat_audio(audio_io, from_number=user_id)
+
+        elif update.message.text:
+            reply = gemini_chat(update.message.text, from_number=user_id)
+
+        else:
+            reply = "مش فاهم اللي انت بعته، جرب تبعت نص أو صورة أو صوت 😅"
+
+        await update.message.reply_text(reply)
+
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_telegram))
+    
+    threading.Thread(
+        target=lambda: application.run_polling(drop_pending_updates=True),
+        daemon=True
+    ).start()
+
+# ==================== Run Server ====================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
