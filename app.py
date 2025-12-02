@@ -72,61 +72,55 @@ def gemini_chat(text="", image_b64=None, user_key="unknown"):
 
         try:
             ip = request.headers.get("X-Forwarded-For", request.remote_addr or "127.0.0.1").split(",")[0].strip()
-            location = {"city": "cairo", "lat": 30.04, "lon": 31.23}
+            location = "cairo"
+            temp = "25"
             if not ip.startswith(("10.", "172.", "192.168.", "127.")):
-                r = requests.get(f"https://ipwho.is/{ip}", timeout=5).json()
+                r = requests.get(f"https://ipwho.is/{ip}", timeout=3).json()
                 if r.get("city"):
-                    location = {"city": r["city"], "lat": r["latitude"], "lon": r["longitude"]}
+                    location = r["city"]
+                    w = requests.get(f"https://api.open-meteo.com/v1/forecast?latitude={r['latitude']}&longitude={r['longitude']}&daily=temperature_2m_max", timeout=3).json()
+                    temp = str(round(w["daily"]["temperature_2m_max"][0])) if w.get("daily") else "25"
         except:
-            location = {"city": "cairo", "lat": 30.04, "lon": 31.23}
+            location, temp = "cairo", "25"
 
-        try:
-            w = requests.get(f"https://api.open-meteo.com/v1/forecast?latitude={location['lat']}&longitude={location['lon']}&daily=temperature_2m_max,temperature_2m_min", timeout=5).json()
-            today_temp = round((w["daily"]["temperature_2m_max"][0] + w["daily"]["temperature_2m_min"][0]) / 2, 1)
-        except:
-            today_temp = 25
+        history_text = "\n".join([
+            f"{'العميل' if e['role']=='user' else 'البوت'}: {e['text'][:100]}"
+            for e in conversation_history[user_key][-10:]
+        ])
 
-        products_text = "\n".join(
-            f"• {row['product_name_ar']} | السعر: {row['sell_price']} جنيه | https://afaq-stores.com/product-details/{row['product_id']}"
-            for _, row in CSV_DATA.iterrows()
-        )
+        products_short = "\n".join([
+            f"• {row['product_name_ar']} | {row['sell_price']} جنيه | https://afaq-stores.com/product-details/{row['product_id']}"
+            for _, row in CSV_DATA.head(30).iterrows()
+        ])
 
-        recent = conversation_history[user_key][-30:]
-        history_text = ""
-        for entry in recent:
-            role = "العميل" if entry["role"] == "user" else "البوت"
-            history_text += f"{entry['time']} - {role}: {entry['text']}\n"
+        prompt = f"""أنت البوت الذكي بتاع آفاق ستورز، بتتكلم عامية مصرية ودودة.
+لو سألك "إنت مين؟" قوله: أيوه أنا البوت الذكي بتاع آفاق ستورز.
 
-        prompt = f"""
-أنت البوت الذكي الخاص بآفاق ستورز، بتتكلم عامية مصرية ودودة وواضحة جدًا.
-لو سألك "إنت مين؟" أو "إنت بوت؟" → رد بالحرف: "أيوه يا فندم، أنا البوت الذكي بتاع آفاق ستورز، موجود عشان أساعدك في أي حاجة"
+العميل في {location} والجو حوالي {temp}°C
 
-العميل موجود في {location["city"]} والجو النهاردة حوالي {today_temp}°C
-
-كل المنتجات اللي عندنا:
-{products_text}
-
-تاريخ المحادثة معاه:
+آخر كلام:
 {history_text}
 
-العميل بيقول دلوقتي: {text or "بعت صورة"}
+المنتجات المتاحة (اختر منهم بس):
+{products_short}
 
-- لو بعت صورة → ابدأ بـ "ثانية بس أشوف الصورة..."
-- لو طلب منتج → رشح من القايمة بالشكل ده:
-تيشيرت قطن سادة أبيض
+العميل بيقول: {text or "بعت صورة"}
+
+لو صورة → قوله "ثانية بس أشوف الصورة..."
+لو طلب حاجة → رشحله من المنتجات بالشكل ده:
+تيشيرت قطن أبيض
 السعر: 130 جنيه
 اللينك: https://afaq-stores.com/product-details/123
 
-رد دلوقتي بالعامية المصرية ومتستخدمش إيموجي كتير.
-""".strip()
+رد دلوقتي بالعامية المصرية ومتستخدمش إيموجي كتير.""".strip()
 
         if image_b64:
             img = Image.open(io.BytesIO(base64.b64decode(image_b64)))
-            response = MODEL.generate_content([prompt, img])
+            response = MODEL.generate_content([prompt, img], stream=False)
         else:
-            response = MODEL.generate_content(prompt)
+            response = MODEL.generate_content(prompt, stream=False)
 
-        reply = response.text.strip() if response and response.text else "ثواني بس وأرجعلك..."
+        reply = response.text.strip() if response and hasattr(response, "text") and response.text else "ثواني بس وأرجعلك..."
 
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         conversation_history[user_key].extend([
@@ -139,9 +133,9 @@ def gemini_chat(text="", image_b64=None, user_key="unknown"):
         return reply
 
     except Exception as e:
-        print("Gemini Error:", e)
-        return "ثواني بس، فيه مشكلة وهرجعلك..."
-
+        print(f"Gemini Error: {e}")
+        return "ثواني بس، فيه مشكلة صغيرة وهرجعلك حالا..."
+        
 def download_media(media_id):
     try:
         url = f"https://graph.facebook.com/v20.0/{media_id}"
@@ -250,4 +244,5 @@ def home():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
 
