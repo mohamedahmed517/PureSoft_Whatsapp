@@ -51,7 +51,7 @@ threading.Thread(target=save_history, daemon=True).start()
 
 genai.configure(api_key=GEMINI_API_KEY)
 MODEL = genai.GenerativeModel(
-    'gemini-1.5-flash',
+    'gemini-2.0-flash',
     generation_config={"temperature": 0.9, "max_output_tokens": 2048},
     safety_settings=[
         {"category": HarmCategory.HARM_CATEGORY_HARASSMENT, "threshold": HarmBlockThreshold.BLOCK_NONE},
@@ -61,7 +61,9 @@ MODEL = genai.GenerativeModel(
     ]
 )
 
-CSV_DATA = pd.read_csv('products.csv')
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+csv_path = os.path.join(BASE_DIR, 'products.csv')
+CSV_DATA = pd.read_csv(csv_path)
 
 def gemini_chat(text="", image_b64=None, user_key="unknown"):
     try:
@@ -248,3 +250,4 @@ def home():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
