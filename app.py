@@ -19,7 +19,6 @@ logging.basicConfig(level=logging.INFO)
 load_dotenv()
 app = Flask(__name__)
 
-# ==================== المتغيرات ====================
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
@@ -48,11 +47,11 @@ def save_history():
         except: pass
 threading.Thread(target=save_history, daemon=True).start()
 
-# ==================== Gemini Setup (تم تصليح الـ safety_settings) ====================
+# ==================== Gemini Setup ====================
 genai.configure(api_key=GEMINI_API_KEY)
 
 MODEL = genai.GenerativeModel(
-    'gemini-1.5-flash',
+    'gemini-2.0-flash',,
     generation_config={"temperature": 0.9, "max_output_tokens": 2048},
     safety_settings=[
         {"category": HarmCategory.HARM_CATEGORY_HARASSMENT, "threshold": HarmBlockThreshold.BLOCK_NONE},
@@ -63,10 +62,9 @@ MODEL = genai.GenerativeModel(
 )
 
 # ==================== Load Products ====================
-try:
-    CSV_DATA = pd.read_csv('products.csv')
-except:
-    CSV_DATA = pd.DataFrame()  # لو الملف مش موجود
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+csv_path = os.path.join(BASE_DIR, 'products.csv')
+CSV_DATA = pd.read_csv(csv_path)
 
 # ==================== Gemini Chat ====================
 def gemini_chat(text="", image_b64=None, user_id="unknown"):
@@ -211,7 +209,7 @@ def telegram_webhook():
                   json={"chat_id": chat_id, "text": reply})
     return jsonify({}), 200
 
-# ==================== Home + Set Webhook ====================
+# ==================== Home ====================
 @app.route("/")
 def home():
     if TELEGRAM_TOKEN:
@@ -228,4 +226,3 @@ def home():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
