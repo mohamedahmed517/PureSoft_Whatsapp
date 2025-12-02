@@ -4,4 +4,5 @@ Pillow
 requests
 gunicorn
 python-dotenv
+python-telegram-bot
 google-generativeai
