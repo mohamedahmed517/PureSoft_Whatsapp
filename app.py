@@ -18,7 +18,6 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
 logging.basicConfig(level=logging.INFO)
-
 load_dotenv()
 app = Flask(__name__)
 
@@ -62,7 +61,7 @@ safety_settings = [
 
 MODEL = genai.GenerativeModel(
     'gemini-1.5-flash',
-    generation_config={"temperature": 0.85, "max_output_tokens": 2048},
+    generation_config={"temperature": 0.9, "max_output_tokens": 2048},
     safety_settings=safety_settings
 )
 
@@ -74,7 +73,7 @@ CSV_DATA = pd.read_csv(csv_path)
 # ==================== WhatsApp Config ====================
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
-WEBHOOK_VERIFY_TOKEN = os.getenv("WEBHOOK_VERIFY_TOKEN", "afaq_whatsapp_only_2025")
+WEBHOOK_VERIFY_TOKEN = os.getenv("WEBHOOK_VERIFY_TOKEN")
 
 # ==================== Helper: Download Media ====================
 def download_media(media_id):
@@ -143,26 +142,35 @@ def gemini_chat(user_message="", image_b64=None, from_number="unknown"):
         for entry in conversation_history[from_number][-50:]:
             if isinstance(entry, dict):
                 time_str = entry.get("time", "")
-                role = "العميل" if entry["role"] == "user" else "أحمد"
+                role = "العميل" if entry["role"] == "user" else "البوت"
                 text = entry["text"]
                 history_lines += f"{time_str} - {role}: {text}\n"
 
         full_message = f"""
-أنت شاب مصري اسمه «أحمد»، بتتكلم عامية مصرية طبيعية جدًا وودودة، بتحب الموضة والعناية الشخصية وبتعرف تحلل الصور كويس.
+أنا بوت ذكي من آفاق ستورز، بتكلم عامية مصرية 100% وأساعدك في اختيار أي لبس أو منتج.
 الجو في {location["city"]} النهاردة حوالي {today_temp}°C
-دول كل المنتجات اللي موجودة عندنا دلوقتي:
+دول كل المنتجات المتاحة دلوقتي:
 {products_text}
+
 آخر رسايل المحادثة:
 {history_lines}
+
 العميل بيقول دلوقتي: {user_message or "بعت صورة"}
-لو طلب لبس أو بعت صورة لبس أو منتج → رشحله من المنتجات بالشكل ده بالظبط:
-تيشيرت قطن سادة ابيض
+
+لو بعت صورة → حللها ورد عليه
+لو طلب حاجة → رشحله من المنتجات بالشكل ده بالظبط:
+تيشيرت قطن سادة أبيض
 السعر: 130 جنيه
 الكاتيجوري: لبس صيفي
 اللينك: https://afaq-stores.com/product-details/1019
-مهم جدًا: استخدم أسماء المنتجات زي ما هي من غير تغيير ولا حرف.
-لو بعت صورة عادية → ابدأ بـ "ثانية بس أشوف الصورة..."
-رد دلوقتي بالعامية المصرية 100% ومتحطش إيموجي ومتقولش إنك بوت.
+
+مهم جدًا:
+- متستخدمش إيموجي خالص
+- متكدبش وتقول إنك إنسان أو اسمك أحمد
+- لو بعت صورة عادية ابدأ بـ "ثانية بس أشوف الصورة..."
+- رد بالعامية المصرية 100% وخليك ودود ومباشر
+
+رد دلوقتي:
 """.strip()
 
         if image_b64:
@@ -193,9 +201,9 @@ def gemini_chat_audio(audio_file, from_number):
             for _, row in CSV_DATA.iterrows()
         )
         full_message = f"""
-أنت أحمد، شاب مصري بتتكلم عامية مصرية ودودة جدًا.
+أنا بوت ذكي من آفاق ستورز، بتكلم عامية مصرية وأساعدك في كل حاجة.
 المنتجات عندنا: {products_text}
-العميل بعتلك ريكورد صوتي → اسمع كويس ورد عليه زي لو كاتب الكلام بالظبط، عامية مصرية 100% بدون إيموجي.
+العميل بعتلك ريكورد صوتي → اسمع كويس ورد عليه بالعامية المصرية 100% بدون إيموجي.
 """
         response = MODEL.generate_content([full_message, audio_file])
         reply = response.text.strip() if response and response.text else "الريكورد مجاش واضح، ابعته تاني"
@@ -211,19 +219,17 @@ def gemini_chat_audio(audio_file, from_number):
         print(f"Audio error: {e}")
         return "الريكورد مجاش واضح، ابعته تاني"
 
-# ==================== WhatsApp Message Processor ====================
+# ==================== WhatsApp Processor ====================
 def process_whatsapp_message(msg):
     from_number = msg["from"]
     msg_type = msg["type"]
 
     if msg_type == "text":
         reply = gemini_chat(msg["text"]["body"], from_number=from_number)
-
     elif msg_type == "image":
         image_id = msg["image"]["id"]
         image_b64 = download_media(image_id)
         reply = gemini_chat("بعت صورة", image_b64, from_number)
-
     elif msg_type in ["audio", "voice"]:
         audio_id = msg["audio"]["id"]
         audio_b64 = download_media(audio_id)
@@ -233,23 +239,20 @@ def process_whatsapp_message(msg):
             reply = gemini_chat_audio(audio_file, from_number)
         else:
             reply = "الريكورد ما وصلش كويس، ابعته تاني"
-
     elif msg_type == "video":
-        reply = gemini_chat("ده فيديو حضرتك، ثانية أشوفه...", from_number=from_number)
-
+        reply = gemini_chat("ده فيديو، ثانية أشوفه...", from_number=from_number)
     elif msg_type == "document":
         filename = msg["document"].get("filename", "مستند")
         reply = gemini_chat(f"ده مستند اسمه {filename}، ثانية أقراه...", from_number=from_number)
-
     else:
-        reply = gemini_chat("انا مفهمتش الي انت باعته .. وضحلي الامور اكتر", from_number=from_number)
+        reply = gemini_chat("مش فاهم إيه اللي بعته، جرب تبعت نص أو صورة", from_number=from_number)
 
     send_whatsapp_message(from_number, reply)
 
-# ==================== WhatsApp Routes ====================
+# ==================== Routes ====================
 @app.route("/")
 def home():
-    return "آفاق ستورز بوت شغال على واتساب وتليجرام 100%"
+    return "بوت آفاق ستورز شغال 100% – واتساب + تليجرام"
 
 @app.route("/webhook", methods=["GET"])
 def webhook_verify():
@@ -263,66 +266,60 @@ def webhook_receive():
         data = request.get_json(force=True)
         if not data or "entry" not in data:
             return "OK", 200
-
         for entry in data["entry"]:
             for change in entry.get("changes", []):
                 value = change.get("value", {})
                 if "messages" in value and value["messages"]:
                     for msg in value["messages"]:
                         process_whatsapp_message(msg)
-
     except Exception as e:
         logging.error(f"WhatsApp Webhook Error: {e}")
         logging.exception(e)
-
     return "OK", 200
 
 # ==================== Telegram Bot ====================
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+if TELEGRAM_TOKEN:
+    print("جاري تشغيل بوت تليجرام...")
 
     async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
-            "أهلًا وسهلًا يا وحش! أنا أحمد من آفاق ستورز 👋\n"
-            "ابعتلي أي حاجة: صورة، صوت، أو سؤال.. وهرد عليك فورًا زي الواتساب بالظبط!"
+            "أهلًا وسهلًا بي حضرتك! أنا البوت الذكي بتاع آفاق ستورز\n"
+            "ابعتلي أي حاجة: صورة، صوت، نص.. وهساعدك فورًا!"
         )
 
-        async def handle_telegram(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            user_id = str(update.effective_user.id)
-            
-            if update.message.photo:
-                file = await update.message.photo[-1].get_file()
-                file_bytes = await file.download_as_bytearray()
-                image_b64 = base64.b64encode(file_bytes).decode('utf-8')
-                reply = gemini_chat("بعت صورة", image_b64, from_number=user_id)
-    
-            elif update.message.voice or update.message.audio:
-                file_obj = update.message.voice or update.message.audio
-                file = await file_obj.get_file()
-                file_bytes = await file.download_as_bytearray()
-                audio_io = io.BytesIO(file_bytes)
-                audio_io.name = "voice.ogg"
-                reply = gemini_chat_audio(audio_io, from_number=user_id)
-    
-            elif update.message.text:
-                reply = gemini_chat(update.message.text, from_number=user_id)
-    
-            else:
-                reply = "مش فاهم إيه اللي بعته، جرب تبعت نص أو صورة أو صوت 😅"
-    
-            await update.message.reply_text(reply)
+    async def handle_telegram(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = str(update.effective_user.id)
+
+        if update.message.photo:
+            file = await update.message.photo[-1].get_file()
+            file_bytes = await file.download_as_bytearray()
+            image_b64 = base64.b64encode(file_bytes).decode('utf-8')
+            reply = gemini_chat("بعت صورة", image_b64, from_number=user_id)
+
+        elif update.message.voice or update.message.audio:
+            file_obj = update.message.voice or update.message.audio
+            file = await file_obj.get_file()
+            file_bytes = await file.download_as_bytearray()
+            audio_io = io.BytesIO(file_bytes)
+            audio_io.name = "voice.ogg"
+            reply = gemini_chat_audio(audio_io, from_number=user_id)
+
+        elif update.message.text:
+            reply = gemini_chat(update.message.text, from_number=user_id)
+
+        else:
+            reply = "مش فاهم اللي انت بعته، جرب نص أو صورة أو صوت"
+
+        await update.message.reply_text(reply)
 
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_telegram))
-    
-    threading.Thread(
-        target=lambda: application.run_polling(drop_pending_updates=True),
-        daemon=True
-    ).start()
+    threading.Thread(target=lambda: application.run_polling(drop_pending_updates=True), daemon=True).start()
 
 # ==================== Run Server ====================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
-
